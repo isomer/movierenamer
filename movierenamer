@@ -11,6 +11,7 @@ import httplib
 import xml.dom.minidom
 import simplejson
 import urllib2
+import re
 
 #
 # Integer => Hexadecimal
@@ -601,8 +602,10 @@ def urlencode(x):
 	return ret
 
 def fetchimdb(title,year):
-	u = urllib2.urlopen("http://deanclatworthy.com/imdb/?q="+urlencode(title)+
+	url=("http://deanclatworthy.com/imdb/?q="+urlencode(title)+
 		"&year="+urlencode(str(year)))
+	print "URL:",url
+	u = urllib2.urlopen(url)
 	x=u.read()
 	print x
 	return simplejson.loads(x)
@@ -630,16 +633,63 @@ def find_movie_by_hash(filename):
 	else:
 		return None
 
+def getpart(name):
+	part=re.match("(?i).*(?:cd|part|disc|disk) ?([1-5]).*",name)
+	if not part:
+		return None
+	return part.group(1)
+
+
+# Attributes:
+# 	'downloads': u'380',
+# 	'isLinked': u'false',
+# 	'language': u'English',
+# 	'mediaType': u'CD',
+# 	'numberOfDiscs': u'1',
+# 	'release': u'Law.Abiding.Citizen.LiNE.R5.XviD-DEViSE',
+# 	'subtitleID': u'264593bd-af4a-4ed8-8fa7-918449d5daf1',
+# 	'title': u'Law Abiding Citizen',
+# 	'year': u'2009'}
+
+def rename(oldpath,data):
+	dirname = os.path.dirname(oldpath)
+	ext = os.path.splitext(oldpath)[1]
+
+	part=data.get("numberOfDisks",None) or getpart(oldpath)
+
+	if part:
+		pattern="%(title)s (%(year)s) - cd%(part)s%(ext)s" 
+	else:
+		pattern="%(title)s (%(year)s)%(ext)s" 
+
+	newname = os.path.join(dirname,	
+			pattern %
+			dict(data.items()+[
+			 ( "ext" , ext ),
+			 ( "part" , part ),
+			]))
+	print "Renaming %s to %s" % (oldpath,newname)
+	try:
+		os.rename(oldpath,newname)
+	except IOError,e:
+		print "Failed:",e
+	except OSError,e:
+		print "Failed:",e
+
 if __name__=="__main__":
 	import sys
 	import pprint
 	for i in sys.argv[1:]:
+		if not os.path.exists(i):
+			print "Skipping %s" % i
+			continue
 		print "%s:" % i
 		subtitles = find_movie_by_hash(sys.argv[1])
 		if (subtitles is None):
 			print "Failed to recognise"
 		else:
-			pprint.pprint( subtitles )
-			data=fetchimdb(subtitles["title"],subtitles["year"]) 
-			pprint.pprint(data)
+			#pprint.pprint( subtitles )
+			#data=fetchimdb(subtitles["title"],subtitles["year"]) 
+			#pprint.pprint(data)
+			rename(i,subtitles)
 
